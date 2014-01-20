@@ -1,6 +1,6 @@
 var fs = require("fs");
 
-console.log("v 0.041");
+console.log("v 0.043");
 
 export interface inode {
     node: string;
@@ -29,28 +29,39 @@ function genericprocessor(pre: (withnode: iwithnode) => void, post: (withnode: i
         buffer += text;
     }
 
-    var pr = (level: number, node: inode) => {
+    var pr = (nodeOrNodes: any, level?: number) => {
 
         var tabs = repeat("\t", level);
 
-        pre({ level: level, node: node, tabs: tabs, write: write });
+        var node = <any>{};
+
+        if (typeof level == "undefined") {
+            node.children = nodeOrNodes;
+            node.isRoot = true;
+            node.node = "{root}";
+            level = -1;
+        } else {
+            node = nodeOrNodes;
+        }
+
+        if (!node.isRoot)
+            pre({ level: level, node: node, tabs: tabs, write: write });
 
         //console.log(tabs + "<node name=\"" + node.node + "\">");
 
         if (node.children) {
             for (var i in node.children) {
-                pr(level + 1, node.children[i]);
+                pr(node.children[i], level + 1);
             }
         }
 
-        post({ level: level, node: node, tabs: tabs, write: write });
-        //console.log(tabs + "</node>");
+        if (!node.isRoot)
+            post({ level: level, node: node, tabs: tabs, write: write });
 
     }
-    //return pr;
 
     return (nodes) => {
-        pr(0, { node: "..", children: nodes });
+        pr(nodes);
         return buffer;
     }
 
@@ -69,16 +80,17 @@ var generateText = genericprocessor((pr: iwithnode) => {
     });
 
 function processAll(array: inode[]) {
-    processArray(array, array, [], processIteratedItem)
-    }
+    processArray(array, array, null, [], processIteratedItem)
+}
 
-function processArray(fullarray: inode[], childarray: inode[], position: number[], iteratorCallback: (fullarray: inode[], position: number[], item: inode) => void) {
+function processArray(fullarray: inode[], childarray: inode[], parentNode: inode, position: number[], iteratorCallback: (fullarray: inode[], position: number[], item: inode, parentItem: inode) => void) {
 
     //console.log("Process array");
 
     var localposition = 0;
     for (var i in childarray) {
-        var itm = childarray[i];
+
+        var currentNode = childarray[i];
 
         var position2 = function () {
             var copy = position.slice(0);
@@ -86,18 +98,25 @@ function processArray(fullarray: inode[], childarray: inode[], position: number[
             return copy;
         } ();
 
-        iteratorCallback(fullarray, position2, itm);
+        iteratorCallback(fullarray, position2, currentNode, parentNode);
 
-        if (itm.children) {
-
-            processArray(fullarray, itm.children, position2, iteratorCallback);
-
+        if (currentNode.children) {
+            processArray(fullarray, currentNode.children, currentNode, position2, iteratorCallback);
         }
+
         localposition++;
     }
+
+    for (var ii in childarray) {
+        if (childarray[ii]["replacedWithChildren"]) {
+            childarray.splice(ii, 1);
+            break;
+        }
+    }
+
 }
 
-function findChild(array, findChildName, callback) {
+function findChild(array: inode[], findChildName: string, callback: (node: inode, includeAsChild: boolean) => void) {
     function findFn(name: string) {
         var firstDot = name.indexOf(".");
 
@@ -115,42 +134,53 @@ function findChild(array, findChildName, callback) {
     for (var i in array) {
 
         //console.log("looking at " + array[i].node + " for " + find.head);
-
-        if (array[i].node == find.head) {
+        var lookAtNode = array[i];
+        if (lookAtNode.node == find.head) {
+            console.log("Found head " + find.head + " now looking for " + ((find.tail) ? find.tail : "attributes"));
             if (find.tail != "") {
                 //console.log("found, continuing");
-                if (array[i].children)
-                    findChild(array[i].children, find.tail, callback)
+                var children = lookAtNode.children;
+                if (children)
+                    if (find.tail != "_") {
+                        findChild(children, find.tail, callback)
+                     } else {
+                        console.log("Include all children");
+                        for (var ii in children) {
+                            var child = children[ii];
+                            callback(children[ii], true);
+                        }
+                    }
             } else {
                 //console.log("found");
                 //console.log(array[i]);
-                callback(array[i]);
+                callback(lookAtNode, false);
             }
         }
     }
 
 };
 
-function createFindIterator(fullarray: inode[], findAt: number[], findChildName: string, callback: (array: inode[], item: inode) => void) {
+function createFindIterator(fullarray: inode[], findAt: number[], findChildName: string, callback: (array: inode[], item: inode, addAsChild: boolean) => void) {
 
         return function (fullarray, position, itm) {
         //console.log("looking at " + position.join(",") + " for " + findAt.join(","));
 
         if (position.join(",") === findAt.join(",")) {
 
-            //console.log("found parent " + itm.node);
-            //console.log("looking for child " + findChildName);
+            console.log("found parent " + itm.node + ((findChildName) ? " now looking for " + findChildName : ""));
+
             if (findChildName == "")
-                callback(fullarray, itm);
+                callback(fullarray, itm, false);
             else
+                console.log("Calling find child");
+            findChild(itm.children, findChildName, function (founditm: inode, addAsChild: boolean) {
 
-                findChild(itm.children, findChildName, function (founditm) {
+                //console.log("found child");
+                //console.log(founditm);
+                console.log("Add as child" + addAsChild);
+                callback(fullarray, founditm, addAsChild);
 
-                    //console.log("found child");
-                    //console.log(founditm);
-                    callback(fullarray, founditm);
-
-                });
+            });
 
 
         }
@@ -159,20 +189,18 @@ function createFindIterator(fullarray: inode[], findAt: number[], findChildName:
 
     };
 
-function processIteratedItem(fullarray: inode[], position: number[], itm: inode) {
+function processIteratedItem(fullarray: inode[], position: number[], itemToProcess: inode, parentNode: inode) {
 
-    if (itm.node.substring(0, 1) == "=") {
+    if (itemToProcess.node.substring(0, 1) == "=") {
 
-        console.log("processing " + itm.node);
+        console.log("processing " + itemToProcess.node);
 
         var count = 0;
 
         var findAt = position.slice(0);
         findAt.pop();
 
-        console.log(itm.node.substring(1));
-
-        var param = itm.node.substring(1);
+        var param = itemToProcess.node.substring(1);
         for (var i = 0; i < param.length; i++) {
 
             if (param.substring(i, i + 1) == ".") {
@@ -189,15 +217,43 @@ function processIteratedItem(fullarray: inode[], position: number[], itm: inode)
 
             console.log("find " + findAt.join(",") + " " + childName);
 
-            var foundCallback = (array: inode[], foundItem: inode) => {
-                console.log("setting value for found node");
+            var foundCallback = (array: inode[], foundItem: inode, addAsChild: boolean) => {
+
                 console.log(foundItem);
+                if (addAsChild) {
+                    console.log("Adding found node as child");
+                    itemToProcess["replacedWithChildren"] = true;
 
-                if (foundItem.children) itm.children = foundItem.children;
-                if (foundItem.attributes) itm.attributes = foundItem.attributes;
+                    if (!(parentNode.children)) {
+                        console.log("Adding children element");
+                        parentNode.children = [];
+                    }
 
-                itm["processed"] = itm.node;
-                itm.node = foundItem.node;
+                    parentNode.children.push(foundItem);
+
+                    console.log("Item after added child");
+                    console.log(itemToProcess);
+
+                } else {
+                    itemToProcess.node = foundItem.node;
+                    console.log("Setting children and attributes from found node");
+                    if (foundItem.children) {
+                        if (!(itemToProcess.children)) {
+                            console.log("Adding children element");
+                            itemToProcess.children = [];
+                        }
+                        itemToProcess.children = itemToProcess.children.concat(foundItem.children);
+                    }
+                    if (foundItem.attributes) {
+                        if (!(itemToProcess.attributes)) {
+                            console.log("Adding attributes element");
+                            itemToProcess.attributes = [];
+                        }
+                        itemToProcess.attributes = itemToProcess.attributes.concat(foundItem.attributes);
+                    }
+                }
+
+                itemToProcess["processed"] = param;
 
             };
 
@@ -205,13 +261,12 @@ function processIteratedItem(fullarray: inode[], position: number[], itm: inode)
 
             //console.log("find referenced node");
 
-            processArray(fullarray, fullarray, [], findIterator);
+            processArray(fullarray, fullarray, itemToProcess, [], findIterator);
+
 
         }
 
-
     }
-
 }
 
 export interface ioptions {
