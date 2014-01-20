@@ -149,7 +149,19 @@ var generateCs = genericprocessor((pr: iwithnode) => {
 
     if (pr.level == 2) {
         var type = "string";
-        if (atts.length > 0 && atts[0] == "i") type = "int";
+        if (atts.length > 0) {
+
+            type = atts[0];
+            if (atts[0] == "i") type = "int";
+
+        }
+
+        if (pr.node.children) {
+            for (var ch in pr.node.children) {
+                pr.write(pr.tabs + "[Description(\"" + pr.node.children[ch].node + "\")]\n");
+            }
+        }
+
         pr.write(pr.tabs + "public " + type + " " + pr.node.node + " {get;set;}\n");
     }
 
@@ -175,7 +187,7 @@ function processAll(array: inode[]) {
 
 function processArray(fullarray: inode[], childarray: inode[], parentNode: inode, position: number[], iteratorCallback: (fullarray: inode[], position: number[], item: inode, parentItem: inode) => void) {
 
-    //console.log("Process array");
+    if (parentNode) console.log(parentNode.node);
 
     var localposition = 0;
     for (var i in childarray) {
@@ -197,12 +209,10 @@ function processArray(fullarray: inode[], childarray: inode[], parentNode: inode
         localposition++;
     }
 
-    console.log("Replacing with children");
 
     var newChildArray = [];
     for (var ii in childarray) {
         if (childarray[ii]["replaceWithChildren"]) {
-            console.log("replace");
             for (var iii in childarray[ii].children) {
                 newChildArray.push(childarray[ii].children[iii]);
             }
@@ -210,23 +220,22 @@ function processArray(fullarray: inode[], childarray: inode[], parentNode: inode
             newChildArray.push(childarray[ii]);
         }
     }
-    console.log("Finished replacing");
 
     childarray = newChildArray;
     return newChildArray;
 
 }
+function splitHeadTail(name: string, char: string) {
+    var firstDot = name.indexOf(char);
 
-function findChild(array: inode[], findChildName: string, callback: (node: inode, includeAsChild: boolean) => void) {
-    function findFn(name: string) {
-        var firstDot = name.indexOf(".");
-
-        if (firstDot == -1) {
+    if (firstDot == -1) {
         return { head: name, tail: "" }
     };
-        return { head: name.substring(0, firstDot), tail: name.substring(firstDot + 1) };
-    }
-    var find = findFn(findChildName);
+    return { head: name.substring(0, firstDot), tail: name.substring(firstDot + 1) };
+
+}
+function findChild(array: inode[], findChildName: string, callback: (node: inode, includeAsChild: boolean) => void) {
+    var find = splitHeadTail(findChildName, ".");
 
     var found = false;
 
@@ -264,25 +273,67 @@ function findChild(array: inode[], findChildName: string, callback: (node: inode
 function createFindIterator(fullarray: inode[], findAt: number[], findChildName: string, callback: (array: inode[], item: inode, addAsChild: boolean) => void) {
 
         return function (fullarray, position, itm) {
-        //console.log("looking at " + position.join(",") + " for " + findAt.join(","));
 
-        if (position.join(",") === findAt.join(",")) {
+        var pos = position.join(",");
+        var find = findAt.join(",");
+
+        var found = (pos === find);
+
+        console.log("looking at " + pos + " for " + find + " and name " + findChildName);
+
+        if (position.length == 1 && find == "") {
+
+            // top level search
+            var headTail = splitHeadTail(findChildName, ".");
+
+            console.log("same level lookup for " + headTail.head);
+            console.log("checking " + itm.node);
+
+            if (itm.node == headTail.head && headTail.tail == "_") {
+
+                // add all children
+                for (var i in itm.children) {
+                    callback(fullarray, itm.children[i], true);
+                }
+
+            }
+            if (itm.node == headTail.head && headTail.tail == "") {
+
+                // add as child
+                callback(fullarray, itm, true);
+
+            }
+
+            if (itm.node == headTail.head && headTail.tail != "" && headTail.tail != "") {
+                found = true;
+                findChildName = headTail.tail;
+            }
+
+            //    if (itm.node == headTail.head) {
+            //        found = true;
+            //        findChildName = headTail.tail;
+            //    }
+            //    if (headTail.tail = "_") {
+            //        found = true;
+            //        findChildName = "_";
+            //    }
+        }
+
+        if (found) {
 
             console.log("found parent " + itm.node + ((findChildName) ? " now looking for " + findChildName : ""));
 
-            if (findChildName == "")
+            if (findChildName == "") {
                 callback(fullarray, itm, false);
-            else
+            }
+            else {
                 console.log("Calling find child");
-            findChild(itm.children, findChildName, function (founditm: inode, addAsChild: boolean) {
+            }
 
-                //console.log("found child");
-                //console.log(founditm);
+            findChild(itm.children, findChildName, function (founditm: inode, addAsChild: boolean) {
                 console.log("Add as child" + addAsChild);
                 callback(fullarray, founditm, addAsChild);
-
             });
-
 
         }
 
@@ -292,7 +343,11 @@ function createFindIterator(fullarray: inode[], findAt: number[], findChildName:
 
 function processIteratedItem(fullarray: inode[], position: number[], itemToProcess: inode, parentNode: inode) {
 
+    // process iterated item
+
     if (itemToProcess.node.substring(0, 1) == "=") {
+
+        // command found at iterated item
 
         console.log("processing " + itemToProcess.node);
 
@@ -360,6 +415,8 @@ function processIteratedItem(fullarray: inode[], position: number[], itemToProce
 
             //console.log("find referenced node");
 
+            console.log("Now iterating");
+
             processArray(fullarray, fullarray, itemToProcess, [], findIterator);
 
 
@@ -421,17 +478,36 @@ function generate(param: any): any {
 
                 var filename = cmd.attributes[0].attr;
                 console.log("Including " + filename);
+
                 var included = generate(filename);
+
                 console.log("Concating");
-                console.log(included);
+
                 if (included) {
-                    if (cmd.type == "reference") included["include"] = "referenced"; else included["include"] = "included";
-                    if (cmd.type == "include") {
-                        parsed.model = included.concat(parsed.model);
-                    } else {
-                        if (!(parsed["references"])) parsed["references"] = [];
-                        parsed.references = parsed.references.concat(included);
+
+                    console.log("array " + included);
+                    var arr = [];
+                    for (var i = 0; i < included.length;i++) {
+
+                        var item = included[i];
+                        console.log(item);
+
+                        item["included"] = cmd.type;
+
+                        console.log(item);
+                        arr.push(item);
+
                     }
+
+                    console.log(included);
+
+                    parsed.model = arr.concat(parsed.model);
+
+                    //if (cmd.type == "include") {
+                    //} else {
+                    //    if (!(parsed["references"])) parsed["references"] = [];
+                    //    parsed.references = parsed.references.concat(included);
+                    //}
                 }
                 else
                     console.log("Empty");
@@ -462,8 +538,21 @@ function generate(param: any): any {
                         console.log("Processing");
                         parsed.processed = parsed.model.slice(0);
                         processAll(parsed.processed);
+
+                        // remove referenced
+
+                        var newChildArray = [];
+                        for (var ii in parsed.processed) {
+                            console.log(parsed.processed[ii]);
+                            if (!(parsed.processed[ii]["included"] && parsed.processed[ii]["included"] == "reference")) {
+                                newChildArray.push(parsed.processed[ii]);
+                            }
+                        }
+
+                        parsed.processed = newChildArray;
+
+
                     }
-                    console.log("Processed to length " + JSON.stringify(parsed.processed).length);
 
                     if (type == "text") {
                         var formatted = generateText(parsed.processed);
@@ -482,7 +571,6 @@ function generate(param: any): any {
                     }
                     if (type == "cs") {
                         var formatted = generateCs(parsed.processed);
-                        console.log("Formatted to length " + formatted.length);
                         fs.writeFileSync(filename, formatted);
                         console.log("Created " + filename);
                     }
@@ -495,6 +583,10 @@ function generate(param: any): any {
                 }
             }
         }
+
+
+
+
         console.log("Finished " + options.infile);
         return parsed.model;
     }
