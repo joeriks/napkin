@@ -30,36 +30,44 @@ NAMEDATTRIBUTE
 
 Literal = c:[a-zA-Z0-9_]+ {return c.join("");}
 
-Code = i:[=#] c:[.a-zA-Z0-9_]+ {return i + c.join("");}
+Code = i:[=#] c:[.a-zA-Z0-9_]+ {return i + c.join("") ;}
 
 LiteralOrStringOrCode = Literal/StringLiteral/Code
 
 StringLiteral "string"
-  = parts:('"' DoubleStringCharacters? '"' / "'" SingleStringCharacters? "'") {
+  = parts:('"' DoubleStringCharactersAllowLineTerminator? '"' / "'" SingleStringCharacters? "'") {
       return parts[1];
     }
 
 DoubleStringCharacters
   = chars:DoubleStringCharacter+ { return chars.join(""); }
 
+DoubleStringCharactersAllowLineTerminator
+  = chars:DoubleStringCharacter+ { return chars.join(""); }
+
+
 SingleStringCharacters
   = chars:SingleStringCharacter+ { return chars.join(""); }
 
 DoubleStringCharacter
+  = !('"' / "\\" / LineTerminator) char_:. { return char_;     }
+  / "\\" 
+
+DoubleStringCharacterAllowLineTerminator
   = !('"' / "\\" ) char_:. { return char_;     }
   / "\\" 
 
 SingleStringCharacter
-  = !("'" / "\\" ) char_:. { return char_;     }
+  = !("'" / "\\" / LineTerminator) char_:. { return char_;     }
   / "\\" 
 
 LineTerminator
   = [\n\r\u2028\u2029]
 __
- = c:(" " / c:MULTILINECOMMENT {return "f1";} / EOL)* {return c.join("");}
+ = (" " / MULTILINECOMMENT / EOL)*
 
 MULTILINECOMMENT
-  = "/*" c:(!"*/" .)* "*/" {return c.length;}
+  = "/*" (!"*/" .)* "*/"
 
 EOL
   = ([ \t]*) ("\r\n" / "\n" / "\r")
