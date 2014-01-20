@@ -68,13 +68,46 @@ function genericprocessor(pre: (withnode: iwithnode) => void, post: (withnode: i
 }
 
 var generateTags = genericprocessor((pr: iwithnode) => {
-    pr.write(pr.tabs + "<node name=\"" + pr.node.node + "\">\n");
+
+    var atts = [];
+    if (pr.node.attributes) {
+        for (var i in pr.node.attributes) {
+            var attr = pr.node.attributes[i];
+            var key = Object.keys(attr)[0];
+            var value = attr[key];
+                atts.push(key + "=" + "\"" + value + "\"");
+
+        }
+    }
+    var attrs = "";
+    if (atts.length > 0) attrs = " " + atts.join(" ");
+
+    pr.write(pr.tabs + "<node name=\"" + pr.node.node + "\"" + attrs + ">\n");
 }, (pr: iwithnode) => {
         pr.write(pr.tabs + "</node>\n");
     });
 
 var generateText = genericprocessor((pr: iwithnode) => {
-    pr.write(pr.tabs + pr.node.node + "\n");
+
+    var atts = [];
+    if (pr.node.attributes) {
+        for (var i in pr.node.attributes) {
+            var attr = pr.node.attributes[i];
+            var key = Object.keys(attr)[0];
+            var value = attr[key];
+
+            if (key == "attr")
+                atts.push(value);
+            else
+                atts.push(key + "=" + value);
+
+        }
+    }
+
+    var attrs = "";
+    if (atts.length > 0) attrs = " " + atts.join(" ");
+
+    pr.write(pr.tabs + pr.node.node + attrs + "\n");
 }, (pr: iwithnode) => {
 
     });
@@ -101,18 +134,29 @@ function processArray(fullarray: inode[], childarray: inode[], parentNode: inode
         iteratorCallback(fullarray, position2, currentNode, parentNode);
 
         if (currentNode.children) {
-            processArray(fullarray, currentNode.children, currentNode, position2, iteratorCallback);
+            currentNode.children = processArray(fullarray, currentNode.children, currentNode, position2, iteratorCallback);
         }
 
         localposition++;
     }
 
+    console.log("Replacing with children");
+
+    var newChildArray = [];
     for (var ii in childarray) {
-        if (childarray[ii]["replacedWithChildren"]) {
-            childarray.splice(ii, 1);
-            break;
+        if (childarray[ii]["replaceWithChildren"]) {
+            console.log("replace");
+            for (var iii in childarray[ii].children) {
+                newChildArray.push(childarray[ii].children[iii]);
+            }
+        } else {
+            newChildArray.push(childarray[ii]);
         }
     }
+    console.log("Finished replacing");
+
+    childarray = newChildArray;
+    return newChildArray;
 
 }
 
@@ -222,17 +266,15 @@ function processIteratedItem(fullarray: inode[], position: number[], itemToProce
                 console.log(foundItem);
                 if (addAsChild) {
                     console.log("Adding found node as child");
-                    itemToProcess["replacedWithChildren"] = true;
+                    itemToProcess["replaceWithChildren"] = true;
 
-                    if (!(parentNode.children)) {
+                    if (!(itemToProcess.children)) {
                         console.log("Adding children element");
-                        parentNode.children = [];
+                        itemToProcess.children = [];
                     }
 
-                    parentNode.children.push(foundItem);
+                    itemToProcess.children.push(foundItem);
 
-                    console.log("Item after added child");
-                    console.log(itemToProcess);
 
                 } else {
                     itemToProcess.node = foundItem.node;
@@ -361,6 +403,12 @@ function generate(param: any): any {
                     }
                     if (type == "text") {
                         var formatted = generateText(parsed.processed);
+                        fs.writeFileSync(filename, formatted);
+                        console.log("Created " + filename);
+                    }
+                    if (type == "xml") {
+
+                        var formatted = generateTags([{ node: "root", children: parsed.processed }]);
                         fs.writeFileSync(filename, formatted);
                         console.log("Created " + filename);
                     }
