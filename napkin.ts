@@ -22,7 +22,7 @@ interface iwithnode {
     tabs: string;
     write: (text: string) => void;
 }
-function genericprocessor(pre: (withnode: iwithnode) => void, post?: (withnode: iwithnode) => void) {
+function genericprocessor(pre: (withnode: iwithnode) => void, hasChildren?: (withnode: iwithnode) => boolean, post?: (withnode: iwithnode) => void) {
 
     var buffer = "";
     var write = (text: string) => {
@@ -49,7 +49,10 @@ function genericprocessor(pre: (withnode: iwithnode) => void, post?: (withnode: 
 
         //console.log(tabs + "<node name=\"" + node.node + "\">");
 
-        if (node.children) {
+        if (typeof hasChildren == "undefined" || hasChildren == null) hasChildren = () => (node.children);
+
+
+        if (hasChildren({ level: level, node: node, tabs: tabs, write: write })) {
             for (var i in node.children) {
                 pr(node.children[i], level + 1);
             }
@@ -61,6 +64,7 @@ function genericprocessor(pre: (withnode: iwithnode) => void, post?: (withnode: 
     }
 
     return (nodes) => {
+        buffer = "";
         pr(nodes);
         return buffer;
     }
@@ -83,7 +87,7 @@ var generateTags = genericprocessor((pr: iwithnode) => {
     if (atts.length > 0) attrs = " " + atts.join(" ");
 
     pr.write(pr.tabs + "<node name=\"" + pr.node.node + "\"" + attrs + ">\n");
-}, (pr: iwithnode) => {
+}, null, (pr: iwithnode) => {
         pr.write(pr.tabs + "</node>\n");
     });
 
@@ -108,7 +112,7 @@ var generateText = genericprocessor((pr: iwithnode) => {
     if (atts.length > 0) attrs = " " + atts.join(" ");
 
     pr.write(pr.tabs + pr.node.node + attrs + "\n");
-}, (pr: iwithnode) => {
+}, null, (pr: iwithnode) => {
 
     });
 
@@ -134,24 +138,33 @@ var generateCs = genericprocessor((pr: iwithnode) => {
     if (atts.length > 0) attrs = " " + atts.join(" ");
 
     if (pr.level == 0) {
-        pr.write(pr.tabs + "namespace " + pr.node.node + " {\n");
+        if (pr.node.node.indexOf("_") != 0)
+            pr.write(pr.tabs + "namespace " + pr.node.node + " {\n");
     }
 
     if (pr.level == 1) {
-        pr.write(pr.tabs + "public class " + pr.node.node + " {\n");
+        if (pr.node.node.indexOf("_") != 0)
+            pr.write(pr.tabs + "public class " + pr.node.node + " {\n");
     }
 
     if (pr.level == 2) {
         var type = "string";
-        if (atts.length>0 && atts[0] == "i") type = "int";
+        if (atts.length > 0 && atts[0] == "i") type = "int";
         pr.write(pr.tabs + "public " + type + " " + pr.node.node + " {get;set;}\n");
     }
 
 
-}, (pr: iwithnode) => {
+},
+    (pr: iwithnode) => {
+        if ((pr.node.children) && pr.node.node.indexOf("_") != 0) return true;
+        return false;
+    },
+
+    (pr: iwithnode) => {
 
         if (pr.level == 0 || pr.level == 1) {
-            pr.write(pr.tabs + "}\n");
+            if (pr.node.node.indexOf("_") != 0)
+                pr.write(pr.tabs + "}\n");
         }
     });
 
@@ -385,7 +398,11 @@ function generate(param: any): any {
 
     var fileAsString: string = fs.readFileSync(infile, "utf8").replace(/^\uFEFF/, ''); // remove bom
 
-    var parsed = pegJsNapkinParser.parse(fileAsString);
+    var parser = createPegJsNapkinParser();
+    var parsed = parser.parse(fileAsString);
+
+    console.log("Infile length: " + fileAsString.length);
+    console.log("Parsed to length: " + JSON.stringify(parsed).length);
 
     // process
     if (parsed.commands) {
@@ -442,9 +459,12 @@ function generate(param: any): any {
                     console.log("Creating " + type + " format");
 
                     if (!parsed.processed) {
-                        parsed.processed = parsed.model.slice();
+                        console.log("Processing");
+                        parsed.processed = parsed.model.slice(0);
                         processAll(parsed.processed);
                     }
+                    console.log("Processed to length " + JSON.stringify(parsed.processed).length);
+
                     if (type == "text") {
                         var formatted = generateText(parsed.processed);
                         fs.writeFileSync(filename, formatted);
@@ -462,6 +482,7 @@ function generate(param: any): any {
                     }
                     if (type == "cs") {
                         var formatted = generateCs(parsed.processed);
+                        console.log("Formatted to length " + formatted.length);
                         fs.writeFileSync(filename, formatted);
                         console.log("Created " + filename);
                     }
@@ -469,6 +490,8 @@ function generate(param: any): any {
                         fs.writeFileSync(filename, JSON.stringify(parsed, null, "  "));
                         console.log("Created " + filename);
                     }
+
+
                 }
             }
         }
