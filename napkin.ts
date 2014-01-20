@@ -22,7 +22,7 @@ interface iwithnode {
     tabs: string;
     write: (text: string) => void;
 }
-function genericprocessor(pre: (withnode: iwithnode) => void, post: (withnode: iwithnode) => void) {
+function genericprocessor(pre: (withnode: iwithnode) => void, post?: (withnode: iwithnode) => void) {
 
     var buffer = "";
     var write = (text: string) => {
@@ -55,7 +55,7 @@ function genericprocessor(pre: (withnode: iwithnode) => void, post: (withnode: i
             }
         }
 
-        if (!node.isRoot)
+        if (!node.isRoot && typeof post != "undefined")
             post({ level: level, node: node, tabs: tabs, write: write });
 
     }
@@ -75,7 +75,7 @@ var generateTags = genericprocessor((pr: iwithnode) => {
             var attr = pr.node.attributes[i];
             var key = Object.keys(attr)[0];
             var value = attr[key];
-                atts.push(key + "=" + "\"" + value + "\"");
+            atts.push(key + "=" + "\"" + value + "\"");
 
         }
     }
@@ -111,6 +111,50 @@ var generateText = genericprocessor((pr: iwithnode) => {
 }, (pr: iwithnode) => {
 
     });
+
+
+var generateCs = genericprocessor((pr: iwithnode) => {
+
+    var atts = [];
+    if (pr.node.attributes) {
+        for (var i in pr.node.attributes) {
+            var attr = pr.node.attributes[i];
+            var key = Object.keys(attr)[0];
+            var value = attr[key];
+
+            if (key == "attr")
+                atts.push(value);
+            else
+                atts.push(key + "=" + value);
+
+        }
+    }
+
+    var attrs = "";
+    if (atts.length > 0) attrs = " " + atts.join(" ");
+
+    if (pr.level == 0) {
+        pr.write(pr.tabs + "namespace " + pr.node.node + " {\n");
+    }
+
+    if (pr.level == 1) {
+        pr.write(pr.tabs + "public class " + pr.node.node + " {\n");
+    }
+
+    if (pr.level == 2) {
+        var type = "string";
+        if (atts.length>0 && atts[0] == "i") type = "int";
+        pr.write(pr.tabs + "public " + type + " " + pr.node.node + " {get;set;}\n");
+    }
+
+
+}, (pr: iwithnode) => {
+
+        if (pr.level == 0 || pr.level == 1) {
+            pr.write(pr.tabs + "}\n");
+        }
+    });
+
 
 function processAll(array: inode[]) {
     processArray(array, array, null, [], processIteratedItem)
@@ -414,6 +458,11 @@ function generate(param: any): any {
                     }
                     if (type == "json") {
                         fs.writeFileSync(filename, JSON.stringify(parsed.processed, null, "  "));
+                        console.log("Created " + filename);
+                    }
+                    if (type == "cs") {
+                        var formatted = generateCs(parsed.processed);
+                        fs.writeFileSync(filename, formatted);
                         console.log("Created " + filename);
                     }
                     if (type == "jsonraw") {
