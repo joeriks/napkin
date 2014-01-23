@@ -1,0 +1,16 @@
+{
+  "name": "napkin",
+  "version": "0.0.45",
+  "description": "ERROR: No README.md file found!",
+  "main": "napkin.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joeriks/napkin.git"
+  },
+  "author": "Jonas Eriksson",
+  "license": "MIT",
+  "gitHead": "1eae0e3dc48f20f76d711281ae14031f4f103c04"
+}
