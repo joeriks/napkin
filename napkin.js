@@ -217,6 +217,8 @@ function generate(objectToParse, type) {
         }
     }
 
+    console.log("Generator not found " + type + " did you miss to install it (i.e. require('napkin-generator-" + type + "')?");
+
     return JSON.stringify(objectToParse, null, "  ");
 }
 exports.generate = generate;

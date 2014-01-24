@@ -17,12 +17,10 @@
     <IISExpressUseClassicPipelineMode />
   </PropertyGroup>
   <ItemGroup>
-    <TypeScriptCompile Include="jtraverser.ts" />
+    <TypeScriptCompile Include="napkin-generator-cs.ts" />
     <TypeScriptCompile Include="napkin-generator-text.ts" />
     <TypeScriptCompile Include="napkin.ts" />
     <TypeScriptCompile Include="Scripts\typings\node\node.d.ts" />
-    <TypeScriptCompile Include="test.ts" />
-    <Content Include="tra.js" />
     <TypeScriptCompile Include="traverse-test.ts" />
     <TypeScriptCompile Include="traverse.d.ts" />
   </ItemGroup>

@@ -1,4 +1,4 @@
-﻿var traverse = require("traverse");
+var traverse = require("traverse");
 var napkin = require("./napkin");
 
 napkin.addGenerator("cs", function (obj) {
