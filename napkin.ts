@@ -1,255 +1,26 @@
+console.log("v 0.051");
+
 var fs = require("fs");
 var napkinparser = require("./napkinparser");
-
-console.log("v 0.045");
+var traverse: TraverseStatic = require("traverse");
 
 export interface inode {
     node: string;
     children?: inode[];
     attributes?: any[];
 }
-function repeat(pattern, count) {
-    if (count < 1) return '';
-    var result = '';
-    while (count > 0) {
-        if (count & 1) result += pattern;
-        count >>= 1, pattern += pattern;
-    }
-    return result;
-}
-interface iwithnode {
-    node: inode;
-    level: number;
-    tabs: string;
-    write: (text: string) => void;
+
+export interface inodeCommand extends inode {
+    type: string;
 }
 
+export interface inodeRoot {
 
-export interface iprocessor {
-    (iterator:iiterator): boolean;
-}
-export interface iiterator {
-    level: number;
-    index: any;
-    parent: iiterator;
-    nodes: inode[];
-    processors: iprocessor[];
-    currentNode: inode;
-    processChildren: () => boolean;
-}
-export function processNodes(iterator:iiterator): boolean {
-
-    if (!(iterator.nodes)) return false;
-
-    if (typeof iterator.level == "undefined") iterator.level = 0; else iterator.level += 1; 
-    if (typeof iterator.index == "undefined") iterator.index = 0;
-
-    iterator.currentNode = iterator.nodes[iterator.index];
-
-    if (typeof iterator.processChildren == "undefined") iterator.processChildren = (processors?:iprocessor[]) => {
-
-        var childIterator = JSON.parse(JSON.stringify(iterator));
-        childIterator.nodes = iterator.currentNode.children;
-
-        childIterator.parent = iterator;
-        if (typeof processors != "undefined") childIterator.processors = processors;
-        return processNodes(childIterator);
-    }
-
-    for (var index in iterator.nodes) {
-
-        iterator.index = index;
-                
-        for (var p in iterator.processors) {
-
-            var processor = iterator.processors[p];
-
-            var result = processor(iterator);
-
-            if (result) return true;
-
-        }
-    }
-
-    return false;
+    commands: inodeCommand[];
+    model: inode[];
+    processed: inode[];
 
 }
-export function write(iterator: iiterator):boolean {
-
-    var s = ""; for (var i = 0; i < iterator.level; i++) s += "\t";
-    console.log(iterator.level + " " + iterator.index);
-    console.log(s + iterator.currentNode.node);
-
-    return iterator.processChildren();
-
-}
-
-
-function genericprocessor(pre: (withnode: iwithnode) => void, hasChildren?: (withnode: iwithnode) => boolean, post?: (withnode: iwithnode) => void) {
-
-    var buffer = "";
-    var write = (text: string) => {
-        buffer += text;
-    }
-
-    var pr = (nodeOrNodes: any, level?: number) => {
-
-        var tabs = repeat("\t", level);
-
-        var node = <any>{};
-
-        if (typeof level == "undefined") {
-            node.children = nodeOrNodes;
-            node.isRoot = true;
-            node.node = "{root}";
-            level = -1;
-        } else {
-            node = nodeOrNodes;
-        }
-
-        if (!node.isRoot)
-            pre({ level: level, node: node, tabs: tabs, write: write });
-
-        //console.log(tabs + "<node name=\"" + node.node + "\">");
-
-        if (typeof hasChildren == "undefined" || hasChildren == null) hasChildren = () => (node.children);
-
-
-        if (hasChildren({ level: level, node: node, tabs: tabs, write: write })) {
-            for (var i in node.children) {
-                pr(node.children[i], level + 1);
-            }
-        }
-
-        if (!node.isRoot && typeof post != "undefined")
-            post({ level: level, node: node, tabs: tabs, write: write });
-
-    }
-
-    return (nodes) => {
-        buffer = "";
-        pr(nodes);
-        return buffer;
-    }
-
-}
-
-var generateTags = genericprocessor((pr: iwithnode) => {
-
-    var atts = [];
-    if (pr.node.attributes) {
-        for (var i in pr.node.attributes) {
-            var attr = pr.node.attributes[i];
-            var key = Object.keys(attr)[0];
-            var value = attr[key];
-            atts.push(key + "=" + "\"" + value + "\"");
-
-        }
-    }
-    var attrs = "";
-    if (atts.length > 0) attrs = " " + atts.join(" ");
-
-    pr.write(pr.tabs + "<node name=\"" + pr.node.node + "\"" + attrs + ">\n");
-}, null, (pr: iwithnode) => {
-        pr.write(pr.tabs + "</node>\n");
-    });
-
-var generateText = genericprocessor((pr: iwithnode) => {
-
-    function stringIfNeeded(s: string) {
-        if (s.indexOf(" ") != -1 || s.indexOf("\n") != -1) {
-            return "\"" + s + "\"";
-        }
-        return s;
-    }
-
-    var atts = [];
-    if (pr.node.attributes) {
-        for (var i in pr.node.attributes) {
-            var attr = pr.node.attributes[i];
-            var key = Object.keys(attr)[0];
-            var value = stringIfNeeded(attr[key]);
-
-            if (key == "attr")
-                atts.push(value);
-            else
-                atts.push(key + "=" + value + "");
-
-        }
-    }
-
-    var attrs = "";
-    if (atts.length > 0) attrs = " " + atts.join(" ");
-
-    pr.write(pr.tabs + stringIfNeeded(pr.node.node) + attrs + "\n");
-}, null, (pr: iwithnode) => {
-
-    });
-
-
-var generateCs = genericprocessor((pr: iwithnode) => {
-
-    var atts = [];
-    if (pr.node.attributes) {
-        for (var i in pr.node.attributes) {
-            var attr = pr.node.attributes[i];
-            var key = Object.keys(attr)[0];
-            var value = attr[key];
-
-            if (key == "attr")
-                atts.push(value);
-            else
-                atts.push(key + "=" + value);
-
-        }
-    }
-
-    var attrs = "";
-    if (atts.length > 0) attrs = " " + atts.join(" ");
-
-    if (pr.level == 0) {
-        if (pr.node.node.indexOf("_") != 0)
-            pr.write(pr.tabs + "namespace " + pr.node.node + " {\n");
-    }
-
-    if (pr.level == 1) {
-        if (pr.node.node.indexOf("_") != 0)
-            pr.write(pr.tabs + "public class " + pr.node.node + " {\n");
-    }
-
-    if (pr.level == 2) {
-        var type = "string";
-        if (atts.length > 0) {
-
-            type = atts[0];
-            if (atts[0] == "i") type = "int";
-
-        }
-
-        if (pr.node.children) {
-            for (var ch in pr.node.children) {
-                pr.write(pr.tabs + "[Description(\"" + pr.node.children[ch].node + "\")]\n");
-            }
-        }
-
-        pr.write(pr.tabs + "public " + type + " " + pr.node.node + " {get;set;}\n");
-    }
-
-
-},
-    (pr: iwithnode) => {
-        if ((pr.node.children) && pr.node.node.indexOf("_") != 0) return true;
-        return false;
-    },
-
-    (pr: iwithnode) => {
-
-        if (pr.level == 0 || pr.level == 1) {
-            if (pr.node.node.indexOf("_") != 0)
-                pr.write(pr.tabs + "}\n");
-        }
-    });
-
 
 function processAll(array: inode[]) {
     processArray(array, array, null, [], processIteratedItem)
@@ -295,16 +66,10 @@ function processArray(fullarray: inode[], childarray: inode[], parentNode: inode
     return newChildArray;
 
 }
-function splitHeadTail(name: string, char: string) {
-    var firstDot = name.indexOf(char);
 
-    if (firstDot == -1) {
-        return { head: name, tail: "" }
-    };
-    return { head: name.substring(0, firstDot), tail: name.substring(firstDot + 1) };
-
-}
 function findChild(array: inode[], findChildName: string, callback: (node: inode, includeAsChild: boolean) => void) {
+
+
     var find = splitHeadTail(findChildName, ".");
 
     var found = false;
@@ -323,7 +88,7 @@ function findChild(array: inode[], findChildName: string, callback: (node: inode
                 if (children)
                     if (find.tail != "_") {
                         findChild(children, find.tail, callback)
-                     } else {
+                    } else {
                         //console.log("Include all children");
                         for (var ii in children) {
                             var child = children[ii];
@@ -342,7 +107,7 @@ function findChild(array: inode[], findChildName: string, callback: (node: inode
 
 function createFindIterator(fullarray: inode[], findAt: number[], findChildName: string, callback: (array: inode[], item: inode, addAsChild: boolean) => void) {
 
-        return function (fullarray, position, itm) {
+    return function (fullarray, position, itm) {
 
         var pos = position.join(",");
         var find = findAt.join(",");
@@ -409,7 +174,7 @@ function createFindIterator(fullarray: inode[], findAt: number[], findChildName:
 
     }
 
-    };
+};
 
 function processIteratedItem(fullarray: inode[], position: number[], itemToProcess: inode, parentNode: inode) {
 
@@ -495,211 +260,134 @@ function processIteratedItem(fullarray: inode[], position: number[], itemToProce
     }
 }
 
-export interface ioptions {
-    //parser?: string;
-    infile?: string;
-    textToParse?: string;
-    //mapfn?: Function;
-    //resultout?: string;
-    //out?: string;
-    //template?: string;
-    //logging?: boolean;
+function splitHeadTail(name: string, char: string) {
+    var firstDot = name.indexOf(char);
+
+    if (firstDot == -1) {
+        return { head: name, tail: "" }
+    };
+    return { head: name.substring(0, firstDot), tail: name.substring(firstDot + 1) };
+
 }
 
-function generate(infile: string): any
-function generate(options: ioptions): any
-function generate(param: any): any {
+export function generate(objectToParse: inodeRoot, type: string): string {
 
-    var options: ioptions;
+    for (var g in generators) {
 
-    if (typeof param == "string") options = { infile: param }; else options = param;
+        var generator = generators[g];
 
-    //var parserFile = (options.parser) ? options.parser : "parser";
+        if (generator.type == type) {
+            return generator.generatorFunction(objectToParse);
+        }
 
-    //if (parserFile.indexOf("./") != 0) parserFile = "./" + parserFile;
+    }
 
-    //var parser = require(parserFile);
+    return JSON.stringify(objectToParse, null, "  ");
 
+}
 
+function runCommands(objectToParse: inodeRoot): any {
 
+    function cmd_include(filename) {
 
-    var infile = (options.infile);
-    //console.log("Parsing");
+        var included = parseFile(filename, false);
 
-    var textToParse: string;
+        if (included) {
+            var arr = [];
+            for (var i = 0; i < included.length; i++) {
 
-    if (options.textToParse)
-        textToParse = options.textToParse;
-    else
-        textToParse = fs.readFileSync(infile, "utf8").replace(/^\uFEFF/, ''); // remove bom
+                var item = included[i];
 
-    var parser = napkinparser;
-    var parsed = parser.parse(textToParse);
+                item["included"] = cmd.type;
 
-    //console.log("Infile length: " + fileAsString.length);
-    //console.log("Parsed to length: " + JSON.stringify(parsed).length);
+                arr.push(item);
 
+            }
 
-    // process
-    if (parsed.commands) {
-        //console.log("Processing " + parsed.commands.length + " commands");
-        var commands = parsed.commands.splice(0);
-        //console.log(commands);
+            objectToParse.model = arr.concat(objectToParse.model);
+        }
 
+    }
+
+    function cmd_map(filename) {
+
+        var req = require("./" + filename);
+        objectToParse.model = req(objectToParse.model);
+
+    }
+
+    function cmd_out(filename, type) {
+
+        if (!objectToParse.processed) {
+
+            objectToParse.processed = objectToParse.model.slice(0);
+            processAll(objectToParse.processed);
+
+            var newChildArray = [];
+            for (var ii in objectToParse.processed) {
+
+                if (!(objectToParse.processed[ii]["included"] && objectToParse.processed[ii]["included"] == "reference")) {
+                    newChildArray.push(objectToParse.processed[ii]);
+                }
+            }
+
+            objectToParse.processed = newChildArray;
+
+        }
+
+        var formatted = generate(objectToParse, type);
+
+    }
+
+    if (objectToParse.commands) {
+
+        var commands = objectToParse.commands.splice(0);
 
         for (var c in commands) {
 
             var cmd = commands[c];
 
-            //console.log("Running command " + cmd.type);
+            if (cmd.type == "include" || cmd.type == "reference") cmd_include(cmd.attributes[0].attr);
 
-            if (cmd.type == "include" || cmd.type == "reference") {
+            if (cmd.type == "map") cmd_map(cmd.attributes[0].attr);
 
-                var filename = cmd.attributes[0].attr;
-                //console.log("Including " + filename);
+            if (cmd.type == "processall") processAll(objectToParse.model);
 
-                var included = generate(filename);
+            if (cmd.type == "out") cmd_out(cmd.attributes[0].attr, (cmd.attributes.length > 1) ? cmd.attributes[1].attr : "text");
 
-                //console.log("Concating");
-
-                if (included) {
-
-                    //console.log("array " + included);
-                    var arr = [];
-                    for (var i = 0; i < included.length; i++) {
-
-                        var item = included[i];
-                        //console.log(item);
-
-                        item["included"] = cmd.type;
-
-                        //console.log(item);
-                        arr.push(item);
-
-                    }
-
-                    //console.log(included);
-
-                    parsed.model = arr.concat(parsed.model);
-
-                    //if (cmd.type == "include") {
-                    //} else {
-                    //    if (!(parsed["references"])) parsed["references"] = [];
-                    //    parsed.references = parsed.references.concat(included);
-                    //}
-                }
-                //else
-                //console.log("Empty");
-            }
-
-            if (cmd.type == "map") {
-
-                var filename = cmd.attributes[0].attr;
-                //console.log("Mapping " + filename);
-                var req = require("./" + filename);
-                parsed.model = req(parsed.model);
-
-            }
-
-            if (cmd.type == "processall") {
-                processAll(parsed.model);
-            }
-
-            if (cmd.type == "out") {
-
-                if (cmd.attributes && cmd.attributes.length > 1) {
-                    var filename = cmd.attributes[0].attr;
-                    var type = cmd.attributes[1].attr;
-
-                    //console.log("Creating " + type + " format");
-
-                    if (!parsed.processed) {
-                        //console.log("Processing");
-                        parsed.processed = parsed.model.slice(0);
-                        processAll(parsed.processed);
-
-                        // remove referenced
-
-                        var newChildArray = [];
-                        for (var ii in parsed.processed) {
-                            //console.log(parsed.processed[ii]);
-                            if (!(parsed.processed[ii]["included"] && parsed.processed[ii]["included"] == "reference")) {
-                                newChildArray.push(parsed.processed[ii]);
-                            }
-                        }
-
-                        parsed.processed = newChildArray;
-
-
-                    }
-
-                    if (type == "text") {
-                        var formatted = generateText(parsed.processed);
-                        fs.writeFileSync(filename, formatted);
-                        console.log("Created " + filename);
-                    }
-                    if (type == "xml") {
-
-                        var formatted = generateTags([{ node: "root", children: parsed.processed }]);
-                        fs.writeFileSync(filename, formatted);
-                        console.log("Created " + filename);
-                    }
-                    if (type == "json") {
-                        fs.writeFileSync(filename, JSON.stringify(parsed.processed, null, "  "));
-                        console.log("Created " + filename);
-                    }
-                    if (type == "cs") {
-                        var formatted = generateCs(parsed.processed);
-                        fs.writeFileSync(filename, formatted);
-                        console.log("Created " + filename);
-                    }
-                    if (type == "jsonraw") {
-                        fs.writeFileSync(filename, JSON.stringify(parsed, null, "  "));
-                        console.log("Created " + filename);
-                    }
-
-
-                }
-            }
         }
-
-
-
-
-        console.log("Finished " + options.infile);
-        return parsed.model;
     }
+
+    return objectToParse;
 }
 
-//var mapped = (options.mapfn) ? options.mapfn(processed) : processed;
-
-//if (options.resultout) {
-//    console.log("Writing json");
-//    fs.writeFileSync(options.resultout, JSON.stringify(mapped, null, "  "));
-//}
-
-//if (options.template) {
-
-//    console.log("Generating from template");
-
-//    var template = swig.compileFile(options.template);
-
-//    var result = template(mapped);
-//    fs.writeFileSync(options.out, result);
-
-//    console.log("Created " + options.out);
-//}
-
-
-module.exports = {
+export function parseString(textToParse: string, doRunCommands:boolean): any {
     
-    processNodes: processNodes,
-    write:write,
-    generate: generate,
-    parser: napkinparser,
-    asTags: generateTags,
-    asText: generateText
+    var parsed: inodeRoot = napkinparser.parse(textToParse);
+
+    if (doRunCommands) runCommands(parsed);
+
+    return parsed.model;
 
 }
 
+export function parseFile(filename:string, doRunCommands:boolean): any {
 
+    var textToParse = fs.readFileSync(filename, "utf8").replace(/^\uFEFF/, ''); // remove bom    
+
+    return parseString(textToParse, doRunCommands);
+
+}
+
+export interface igenerator {
+    type: string;
+    generatorFunction: (obj: inodeRoot) => string;
+}
+
+export var generators: igenerator[] = [];
+
+export function addGenerator(type: string, generatorFunction:(obj: inodeRoot)=>string) {
+    generators.push({ type: type, generatorFunction: generatorFunction });
+
+    console.log("Added generator for Napkin: " + type);
+}
