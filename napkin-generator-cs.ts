@@ -11,23 +11,29 @@ napkin.addGenerator("cs", (obj) => {
 
             this.before(function () {
                 if (node.node) {
-                    var text = "";
 
-                    if (this.level == 0) {
-                        text = "namespace " + node.node + " {\n";
-                    }
                     if (this.level == 1) {
-                        text = "public class " + node.node + " {\n";
+                        s += "namespace " + node.node + " {\n";
                     }
-                    if (this.level == 1) {
-                        text = "public string " + node.node + " {get;set;}\n";
+                    if (this.level == 3) {
+                        s += "\tpublic class " + node.node + " {\n";
+                    }
+                    if (this.level == 5) {
+                        s += "\t\tpublic string " + node.node + " {get;set;}\n";
                     }
 
-                    s += Array(this.level + 1).join("\t") + text + "\n";
+                    
                 }
             });
 
-            this.after(function () { if (this.level < 2) s += Array(this.level + 1).join("\t") + '}\n' });
+            this.after(function () {
+                if (this.level == 1) {
+                    s += "}\n";
+                }
+                if (this.level == 3) {
+                    s += "\t}\n";
+                }
+            });
         }
 
     });
