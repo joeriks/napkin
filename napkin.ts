@@ -270,7 +270,7 @@ function splitHeadTail(name: string, char: string) {
 
 }
 
-export function generate(objectToParse: inodeRoot, type: string): string {
+export function generate(objectToParse: inode[], type: string): string {
 
     for (var g in generators) {
 
@@ -369,6 +369,8 @@ function runCommands(objectToParse: inodeRoot): any {
 
 export function parseString(textToParse: string, doRunCommands:boolean): any {
     
+    if (typeof doRunCommands == "undefined") doRunCommands = true;
+
     var parsed: inodeRoot = napkinparser.parse(textToParse);
 
     if (doRunCommands) runCommands(parsed);
@@ -379,6 +381,8 @@ export function parseString(textToParse: string, doRunCommands:boolean): any {
 
 export function parseFile(filename:string, doRunCommands:boolean): any {
 
+    if (typeof doRunCommands == "undefined") doRunCommands = true;
+
     var textToParse = fs.readFileSync(filename, "utf8").replace(/^\uFEFF/, ''); // remove bom    
 
     return parseString(textToParse, doRunCommands);
@@ -387,12 +391,12 @@ export function parseFile(filename:string, doRunCommands:boolean): any {
 
 export interface igenerator {
     type: string;
-    generatorFunction: (obj: inodeRoot) => string;
+    generatorFunction: (obj: inode[]) => string;
 }
 
 export var generators: igenerator[] = [];
 
-export function addGenerator(type: string, generatorFunction:(obj: inodeRoot)=>string) {
+export function addGenerator(type: string, generatorFunction:(obj: inode[])=>string) {
     generators.push({ type: type, generatorFunction: generatorFunction });
 
     console.log("Added generator for Napkin: " + type);
