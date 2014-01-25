@@ -17,7 +17,7 @@ napkin.addGenerator("text", (obj) => {
 
             this.before(function () {
                 if (node.node) {
-                    s += Array(this.level + 1).join("\t") + node.node + "\n";
+                    s += Array(Math.floor(this.level/2)).join("\t") + node.node + "\n";
                 }
             });
 

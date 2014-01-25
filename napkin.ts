@@ -290,7 +290,7 @@ export function generate(objectToParse: inodeRoot, type: string): string {
 
 function runCommands(objectToParse: inodeRoot): any {
 
-    function cmd_include(filename) {
+    function cmd_include(filename, type) {
 
         var included = parseFile(filename, false);
 
@@ -300,7 +300,7 @@ function runCommands(objectToParse: inodeRoot): any {
 
                 var item = included[i];
 
-                item["included"] = cmd.type;
+                item["included"] = type;
 
                 arr.push(item);
 
@@ -327,9 +327,11 @@ function runCommands(objectToParse: inodeRoot): any {
 
             var newChildArray = [];
             for (var ii in objectToParse.processed) {
-
-                if (!(objectToParse.processed[ii]["included"] && objectToParse.processed[ii]["included"] == "reference")) {
+                var node = objectToParse.processed[ii];
+                if (!(node["included"] && node["included"] == "reference")) {
                     newChildArray.push(objectToParse.processed[ii]);
+                } else {
+                    console.log("excluded " + node.node);
                 }
             }
 
@@ -337,7 +339,9 @@ function runCommands(objectToParse: inodeRoot): any {
 
         }
 
-        var formatted = generate(objectToParse, type);
+        var formatted = generate(objectToParse.processed, type);
+
+        fs.writeFileSync(filename, formatted);
 
     }
 
@@ -349,7 +353,7 @@ function runCommands(objectToParse: inodeRoot): any {
 
             var cmd = commands[c];
 
-            if (cmd.type == "include" || cmd.type == "reference") cmd_include(cmd.attributes[0].attr);
+            if (cmd.type == "include" || cmd.type == "reference") cmd_include(cmd.attributes[0].attr, cmd.type);
 
             if (cmd.type == "map") cmd_map(cmd.attributes[0].attr);
 
