@@ -1,12 +1,14 @@
-console.log("v 0.051");
+console.log("v 0.052");
 
 var fs = require("fs");
+var path = require("path");
 var napkinparser = require("./napkinparser");
 var traverse: TraverseStatic = require("traverse");
 
 export interface inode {
     node: string;
     children?: inode[];
+    parameters?: string[];
     attributes?: any[];
 }
 
@@ -320,6 +322,14 @@ function runCommands(objectToParse: inodeRoot): any {
 
     function cmd_out(filename, type) {
 
+        if (typeof type == "undefined" || type == null) {
+            type = path.extname(filename);
+            if (type.indexOf(".") == 0)
+                type = type.substring(1);
+            else
+                type = "text";
+        }
+
         if (!objectToParse.processed) {
 
             objectToParse.processed = objectToParse.model.slice(0);
@@ -359,7 +369,7 @@ function runCommands(objectToParse: inodeRoot): any {
 
             if (cmd.type == "processall") processAll(objectToParse.model);
 
-            if (cmd.type == "out") cmd_out(cmd.attributes[0].attr, (cmd.attributes.length > 1) ? cmd.attributes[1].attr : "text");
+            if (cmd.type == "out") cmd_out(cmd.attributes[0].attr, (cmd.attributes.length > 1) ? cmd.attributes[1].attr : null);
 
         }
     }

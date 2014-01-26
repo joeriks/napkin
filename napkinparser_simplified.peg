@@ -1,0 +1,98 @@
+{ var indentStack = [], indent = ""; }
+
+start
+  = node:(node:Node {return node;})+ {return {document:node}}
+
+__
+ = c:(" " / c:MultiLineComment {return "f1";} / EOL)* {return c.join("");}
+
+
+NodeHead = c:[a-zA-Z.]+ " "* {return c.join("");}
+
+WS "Whitespace"
+  = " "*/EOL
+
+Node
+  = Samedent node:(!EOL 
+    nodeHead:LiteralOrStringOrCode attributes:AttributeOrParameters  { 
+    
+    var node= {name:nodeHead};
+    if (attributes.length>0) node.attributes = attributes;
+
+return node;
+    
+    
+    }) EOL*
+    children:( Indent c:Node* __ Dedent { return c; })?
+    {     
+      if (children) node["children"]=children; 
+      return node; 
+}
+
+AttributeOrParameters
+  = (" "* attrs:(Attribute/Parameter) {return attrs;})*
+
+Attribute "Attribute"
+  = name:LiteralOrStringOrCode ("="/":") attr:LiteralOrStringOrCode { var o = {};o[name]=attr;return o;}
+
+Parameter "Parameter"
+  = attr:(attr:LiteralOrStringOrCode { return attr }) {return attr}
+
+
+Word "Word" = c:[a-z0-9,.\/\\$+*_]i+ {return c.join("");}
+
+LiteralOrStringOrCode = Comment/Word/StringLiteral
+
+Comment "comment"
+  = parts:('/*' CommentCharacters? '*/' ) {
+      return {comment: parts[1]};
+    }
+
+StringLiteral "string"
+  = parts:('/*' CommentCharacters? '*/' / '"' DoubleStringCharacters? '"' / "'" SingleStringCharacters? "'") {
+      return parts[1];
+    }
+
+CommentCharacters
+  = chars:CommentCharacter+ { return chars.join(""); }
+
+DoubleStringCharacters
+  = chars:DoubleStringCharacter+ { return chars.join(""); }
+
+SingleStringCharacters
+  = chars:SingleStringCharacter+ { return chars.join(""); }
+
+DoubleStringCharacter
+  = !('"' / "\\" ) char_:. { return char_;     }
+  / "\\" 
+
+CommentCharacter
+  = !('/*' / "*/" ) char_:. { return char_;     }
+
+
+SingleStringCharacter
+  = !("'" / "\\" ) char_:. { return char_;     }
+  / "\\" 
+
+LineTerminator
+  = [\n\r\u2028\u2029]
+
+MultiLineComment
+  = "/*" c:(!"*/" c:. {return {f:c};})* "*/" {return {comment:c};}
+
+EOL
+  = ([ \t]*) ("\r\n" / "\n" / "\r")
+
+Samedent
+  = i:[ \t]* &{ return i.join("") === indent; }
+
+Indent07
+  = i:[ \t]+ &{ return i.length > indent.length; }
+    { indentStack.push(indent); indent = i.join(""); pos = offset; }
+
+Indent
+  = i:[ \t]+ &{ return i.length > indent.length; }
+    { indentStack.push(indent); indent = i.join(""); peg$currPos = offset(); }
+
+Dedent
+  = { indent = indentStack.pop(); }
